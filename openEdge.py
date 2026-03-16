@@ -13,6 +13,7 @@ from selenium.common.exceptions import SessionNotCreatedException
 import pygetwindow as gw
 import pyautogui
 import ctypes
+import re
 
 # ====== 1. KONFIGURASI PATH DINAMIS ======
 if getattr(sys, 'frozen', False):
@@ -62,33 +63,37 @@ def get_driver():
     
     except SessionNotCreatedException as e:
         error_msg = str(e)
+        error_msg = str(e)
+        print(f"Terdeteksi masalah versi: {error_msg}")
         
-        # SKENARIO A: DRIVER DI PC LEBIH TINGGI DARI BROWSER EDGE
-        if "supports Microsoft Edge version" in error_msg:
-            msg = ("Driver di sistem sudah versi terbaru, tapi BROWSER EDGE PC ini masih versi lama.\n\n"
-                   "TINDAKAN:\n1. Buka Edge\n2. Buka edge://settings/help\n3. Tunggu update & Restart PC.")
-            print(msg)
-            alert_app(msg, "UPDATE EDGE DIPERLUKAN")
-            sys.exit()
+        # MENGGUNAKAN REGEX UNTUK AMBIL ANGKA VERSI
+        # Mencari pola angka seperti 144.xxx dan 146.xxx
+        versions = re.findall(r'\d+\.\d+\.\d+\.\d+', error_msg)
         
-        # SKENARIO B: DRIVER DI PC KETINGGALAN (BIASA TERJADI SETELAH EDGE UPDATE)
-        else:
-            print("Driver lokal kadaluwarsa. Mengunduh update terbaru...")
-            if download_driver_from_github():
-                try:
-                    service = Service(executable_path=str(EDGE_DRIVER_PATH))
-                    return webdriver.Edge(service=service, options=options)
-                except Exception:
-                    # JIKA MASIH ERROR: Berarti di GitHub juga belum di-update oleh Anda
-                    msg_it = ("ERROR: Driver di cloud belum di update.\n\n"
-                              "SEGERA HUBUNGI IT RSTN UNTUK UPDATE DI CLOUD!")
-                    print(msg_it)
-                    alert_app(msg_it, "Warning")
-                    sys.exit()
-            else:
-                alert_app("Gagal memperbarui driver dari Cloud.", "Error")
+        if len(versions) >= 2:
+            driver_ver = int(versions[0].split('.')[0])   # Hasilnya: 144
+            browser_ver = int(versions[1].split('.')[0])  # Hasilnya: 146
+            
+            if driver_ver < browser_ver:
+                # Driver lama, Browser baru
+                print("Driver ketinggalan. Mendownload driver baru dari GitHub...")
+                if download_driver_from_github():
+                    # Coba jalankan lagi setelah download
+                    try:
+                        service = Service(executable_path=str(EDGE_DRIVER_PATH))
+                        return webdriver.Edge(service=service, options=options)
+                    except:
+                        alert_app("Gagal sinkronisasi. Hubungi IT RSTN!", "Error")
+                        sys.exit()
+            
+            elif driver_ver > browser_ver:
+                # Driver baru, Browser minta diupdate
+                msg = f"Driver sudah versi {driver_ver}, tapi Microsoft Edge Anda masih Versi {browser_ver}.\n\nSilakan Update Edge di menu Settings -> About."
+                alert_app(msg, "Update Edge Diperlukan")
                 sys.exit()
-                
+        # Jika tidak ketemu angka versinya, coba download saja sebagai langkah terakhir
+        download_driver_from_github()
+        sys.exit()         
     except Exception as e:
         alert_app(f"Kesalahan Fatal: {e}", "Error")
         sys.exit()
