@@ -9,6 +9,7 @@ from selenium.webdriver.edge.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import SessionNotCreatedException
 import pygetwindow as gw
 import pyautogui
 
@@ -46,26 +47,48 @@ def get_driver():
     options.add_argument("--disable-software-rasterizer")
     options.add_experimental_option("detach", True)
 
+    # Cek fisik file
     if not EDGE_DRIVER_PATH.exists():
         if not download_driver_from_github():
-            pyautogui.alert("Driver tidak ditemukan! Cek koneksi internet.", "Error")
+            pyautogui.alert("Driver hilang dan gagal download. Cek internet!", "Error")
             sys.exit()
 
     try:
         service = Service(executable_path=str(EDGE_DRIVER_PATH))
         return webdriver.Edge(service=service, options=options)
-    except Exception:
-        if download_driver_from_github():
-            try:
-                service = Service(executable_path=str(EDGE_DRIVER_PATH))
-                return webdriver.Edge(service=service, options=options)
-            except Exception:
-                msg = "ERROR: Driver yang diunduh tidak kompatibel.\nSEGERA HUBUNGI IT RSTN!"
-                pyautogui.alert(msg, "Peringatan IT RSTN")
-                sys.exit()
-        else:
-            pyautogui.alert("Gagal update driver terbaru!!!", "Error")
+    
+    except SessionNotCreatedException as e:
+        error_msg = str(e)
+        
+        # SKENARIO A: DRIVER DI PC LEBIH TINGGI DARI BROWSER EDGE
+        if "supports Microsoft Edge version" in error_msg:
+            msg = ("Driver di sistem sudah versi terbaru, tapi BROWSER EDGE PC ini masih versi lama.\n\n"
+                   "TINDAKAN:\n1. Buka Edge\n2. Buka edge://settings/help\n3. Tunggu update & Restart PC.")
+            print(msg)
+            pyautogui.alert(msg, "UPDATE EDGE DIPERLUKAN")
             sys.exit()
+        
+        # SKENARIO B: DRIVER DI PC KETINGGALAN (BIASA TERJADI SETELAH EDGE UPDATE)
+        else:
+            print("Driver lokal kadaluwarsa. Mengunduh update terbaru...")
+            if download_driver_from_github():
+                try:
+                    service = Service(executable_path=str(EDGE_DRIVER_PATH))
+                    return webdriver.Edge(service=service, options=options)
+                except Exception:
+                    # JIKA MASIH ERROR: Berarti di GitHub juga belum di-update oleh Anda
+                    msg_it = ("ERROR: Driver di cloud belum di update.\n\n"
+                              "SEGERA HUBUNGI IT RSTN UNTUK UPDATE DI CLOUD!")
+                    print(msg_it)
+                    pyautogui.alert(msg_it, "Warning")
+                    sys.exit()
+            else:
+                pyautogui.alert("Gagal memperbarui driver dari Cloud.", "Error")
+                sys.exit()
+                
+    except Exception as e:
+        pyautogui.alert(f"Kesalahan Fatal: {e}", "Error")
+        sys.exit()
 
 # ====== 4. LOGIKA UTAMA ======
 def main():
