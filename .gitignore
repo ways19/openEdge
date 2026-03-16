@@ -1,0 +1,26 @@
+# --- KEAMANAN (Paling Penting) ---
+# Jangan upload file konfigurasi yang berisi password asli
+config.ini
+
+# --- PYTHON ---
+# Folder sampah hasil eksekusi Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# --- BUILD (PyInstaller) ---
+# Folder hasil build exe tidak perlu diupload (hanya bikin berat)
+build/
+dist/
+*.spec
+
+# --- DRIVER ---
+# Jika Anda ingin driver diatur manual/khusus, bisa di-ignore.
+# Tapi jika Anda ingin menjadikannya pusat download, jangan di-ignore.
+# driver/
+
+# --- LOGS & TEMPORARY ---
+*.log
+.vscode/
+.idea/

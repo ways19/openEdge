@@ -1,120 +1,139 @@
 import os
+import sys
+import requests
+import time
+import configparser
+from pathlib import Path
 from selenium import webdriver
 from selenium.webdriver.edge.service import Service
-from selenium.webdriver.edge.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.microsoft import EdgeChromiumDriverManager
-import time
 import pygetwindow as gw
 import pyautogui
-import configparser
-from pathlib import Path
 
-# ====== CONFIGURATION ======
-config = configparser.ConfigParser()
-config.read('config.ini')
-
-url = config.get('DEFAULT', 'url')
-klinik = config.get('DEFAULT', 'klinik')
-username = config.get('DEFAULT', 'username')
-password = config.get('DEFAULT', 'password')
-
-# Matikan log download agar tampilan bersih
-os.environ['WDM_LOG_LEVEL'] = '0'
-
-# ====== SETUP WEBDRIVER (HYBRID ONLINE/OFFLINE) ======
-options = webdriver.EdgeOptions()
-options.add_argument("--ignore-certificate-errors")
-options.add_experimental_option("detach", True)
-
-try:
-    # 1. Coba install/update driver (Membutuhkan Internet)
-    print("Mengecek versi driver...")
-    driver_path = EdgeChromiumDriverManager().install()
-    service = Service(executable_path=driver_path)
-    driver = webdriver.Edge(service=service, options=options)
-    print("Driver siap (Online Mode).")
-
-except Exception as e:
-    # 2. Jika gagal (Offline), coba cari di cache lokal
-    print("Koneksi gagal atau Offline. Mencoba menggunakan driver yang ada...")
-    try:
-        # Menghubungkan ke driver yang terakhir kali didownload
-        from webdriver_manager.core.driver_cache import DriverCacheManager
-        cache = DriverCacheManager()
-        # Cari path driver terakhir di folder WDM
-        last_driver = cache.find_driver(EdgeChromiumDriverManager().driver)
-        
-        if last_driver:
-            service = Service(executable_path=last_driver)
-            driver = webdriver.Edge(service=service, options=options)
-            print("Driver ditemukan di cache (Offline Mode).")
-        else:
-            raise Exception("Tidak ada driver di cache. Harap hubungkan internet sekali saja.")
-            
-    except Exception as offline_err:
-        print(f"FATAL ERROR: {offline_err}")
-        input("Tekan Enter untuk keluar...")
-        exit()
-
-# ====== PROSES AUTOMASI ======
-driver.get(url)
-time.sleep(3)
-
-# Pindah ke layar kedua & Fullscreen
-windows = gw.getWindowsWithTitle("Sistem")
-if windows:
-    edge_window = windows[0]
-    screen_width, _ = pyautogui.size()
-    edge_window.moveTo(screen_width + 50, 100)
-    time.sleep(1)
-    pyautogui.press("f11")
+# ====== 1. KONFIGURASI PATH DINAMIS ======
+if getattr(sys, 'frozen', False):
+    BASE_DIR = Path(sys.executable).parent
 else:
-    print("Jendela tidak ditemukan, lanjut tanpa pindah layar.")
+    BASE_DIR = Path(__file__).resolve().parent
 
-# Gunakan WebDriverWait agar lebih stabil dibanding time.sleep manual
-wait = WebDriverWait(driver, 10)
+DRIVER_DIR = BASE_DIR / "driver"
+EDGE_DRIVER_PATH = DRIVER_DIR / "msedgedriver.exe"
+CONFIG_PATH = BASE_DIR / "config.ini"
+GITHUB_DRIVER_URL = "https://raw.githubusercontent.com/ways19/openEdge/main/driver/msedgedriver.exe"
 
-try:
-    # Login Process
-    username_field = wait.until(EC.presence_of_element_located((By.NAME, "LOGIN")))
-    password_field = driver.find_element(By.NAME, "PASSWORD")
-    
-    username_field.send_keys(username)
-    password_field.send_keys(password)
-    
-    login_button = driver.find_element(By.CSS_SELECTOR, "a#button-1041.x-btn.x-unselectable.x-btn-soft-saphire-small")
-    login_button.click()
+# ====== 2. FUNGSI DOWNLOAD DRIVER DARI GITHUB ======
+def download_driver_from_github():
+    print("Sedang mengunduh update driver terbaru ...")
+    if not DRIVER_DIR.exists():
+        DRIVER_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        response = requests.get(GITHUB_DRIVER_URL, stream=True, timeout=30)
+        if response.status_code == 200:
+            with open(EDGE_DRIVER_PATH, "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
+            return True
+        return False
+    except Exception:
+        return False
 
-    # Navigasi Menu
-    time.sleep(2)
-    menu_button = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "#button-1048-btnEl.x-btn-button.x-btn-button-default-toolbar-small")))
-    menu_button.click()
-    
-    time.sleep(0.5)
-    informasi_element = wait.until(EC.element_to_be_clickable((By.XPATH, "//div[text()='Informasi']")))
-    informasi_element.click()
-    
-    time.sleep(0.5)
-    driver.find_element(By.XPATH, "//div[@class='thumb-title']//strong[text()='Informasi Pengunjung']").click()
-    
-    # Pilih Klinik dari Config
-    time.sleep(2)
-    checkbox_klinik = wait.until(EC.element_to_be_clickable((By.XPATH, f"//tr[td/div[contains(text(),'{klinik}')]]//div[@unselectable='on']")))
-    checkbox_klinik.click()
-    
-    checkbox_utama = driver.find_element(By.XPATH, "//input[@id='checkbox-1132-inputEl']")
-    checkbox_utama.click()
-    
-    time.sleep(1)
-    mulai_button = driver.find_element(By.XPATH, "//a[@id='button-1135']//span[contains(text(),'Mulai')]")
-    mulai_button.click()
+# ====== 3. FUNGSI INISIALISASI DRIVER ======
+def get_driver():
+    options = webdriver.EdgeOptions()
+    options.add_argument("--ignore-certificate-errors")
+    options.add_argument("--disable-software-rasterizer")
+    options.add_experimental_option("detach", True)
 
-    print("Automasi berhasil dijalankan.")
+    if not EDGE_DRIVER_PATH.exists():
+        if not download_driver_from_github():
+            pyautogui.alert("Driver tidak ditemukan! Cek koneksi internet.", "Error")
+            sys.exit()
 
-except Exception as e:
-    print(f"Terjadi kesalahan saat navigasi: {e}")
+    try:
+        service = Service(executable_path=str(EDGE_DRIVER_PATH))
+        return webdriver.Edge(service=service, options=options)
+    except Exception:
+        if download_driver_from_github():
+            try:
+                service = Service(executable_path=str(EDGE_DRIVER_PATH))
+                return webdriver.Edge(service=service, options=options)
+            except Exception:
+                msg = "ERROR: Driver yang diunduh tidak kompatibel.\nSEGERA HUBUNGI IT RSTN!"
+                pyautogui.alert(msg, "Peringatan IT RSTN")
+                sys.exit()
+        else:
+            pyautogui.alert("Gagal update driver terbaru!!!", "Error")
+            sys.exit()
 
-# Driver dibiarkan terbuka karena opsi "detach" aktif
+# ====== 4. LOGIKA UTAMA ======
+def main():
+    if not CONFIG_PATH.exists():
+        pyautogui.alert(f"File {CONFIG_PATH.name} tidak ditemukan!", "Error")
+        sys.exit()
+        
+    config = configparser.ConfigParser()
+    config.read(CONFIG_PATH)
+    
+    try:
+        url = config.get('DEFAULT', 'url')
+        klinik = config.get('DEFAULT', 'klinik')
+        username = config.get('DEFAULT', 'username')
+        password = config.get('DEFAULT', 'password')
+    except Exception as e:
+        pyautogui.alert(f"Isi config.ini tidak lengkap!\n{e}", "Error")
+        sys.exit()
+
+    driver = get_driver()
+    driver.get(url)
+    
+    # Tunggu dan Pindah Layar
+    time.sleep(3)
+    windows = gw.getWindowsWithTitle("Sistem")
+    if windows:
+        edge_window = windows[0]
+        screen_width, _ = pyautogui.size()
+        edge_window.moveTo(screen_width + 50, 100)
+        time.sleep(1)
+        pyautogui.press("f11")
+
+    wait = WebDriverWait(driver, 15)
+
+    try:
+        # Proses Login
+        wait.until(EC.presence_of_element_located((By.NAME, "LOGIN"))).send_keys(username)
+        driver.find_element(By.NAME, "PASSWORD").send_keys(password)
+        driver.find_element(By.CSS_SELECTOR, "a#button-1041").click()
+        
+        # Navigasi Menu (Bagian yang Anda minta)
+        print("Membuka Menu...")
+        menu_btn = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "#button-1048-btnEl")))
+        menu_btn.click()
+        
+        time.sleep(0.5)
+        wait.until(EC.element_to_be_clickable((By.XPATH, "//div[text()='Informasi']"))).click()
+        
+        time.sleep(0.5)
+        wait.until(EC.element_to_be_clickable((By.XPATH, "//div[@class='thumb-title']//strong[text()='Informasi Pengunjung']"))).click()
+        
+        # Pilih Klinik
+        time.sleep(2)
+        xpath_klinik = f"//tr[td/div[contains(text(),'{klinik}')]]//div[@unselectable='on']"
+        wait.until(EC.element_to_be_clickable((By.XPATH, xpath_klinik))).click()
+        
+        # Checkbox Utama
+        driver.find_element(By.XPATH, "//input[@id='checkbox-1132-inputEl']").click()
+        
+        # Tombol Mulai
+        time.sleep(1)
+        driver.find_element(By.XPATH, "//a[@id='button-1135']//span[contains(text(),'Mulai')]").click()
+        
+        print("Automasi Berhasil!")
+
+    except Exception as e:
+        print(f"Terjadi kesalahan navigasi: {e}")
+        # pyautogui.alert(f"Terjadi kesalahan: {e}", "Navigasi Gagal")
+
+if __name__ == "__main__":
+    main()
