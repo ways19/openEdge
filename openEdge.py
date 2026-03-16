@@ -12,6 +12,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import SessionNotCreatedException
 import pygetwindow as gw
 import pyautogui
+import ctypes
 
 # ====== 1. KONFIGURASI PATH DINAMIS ======
 if getattr(sys, 'frozen', False):
@@ -23,6 +24,8 @@ DRIVER_DIR = BASE_DIR / "driver"
 EDGE_DRIVER_PATH = DRIVER_DIR / "msedgedriver.exe"
 CONFIG_PATH = BASE_DIR / "config.ini"
 GITHUB_DRIVER_URL = "https://raw.githubusercontent.com/ways19/openEdge/main/driver/msedgedriver.exe"
+def alert_app(message, title="Alert"):
+    ctypes.windll.user32.MessageBoxW(0, message, title, 0x40 | 0x1)
 
 # ====== 2. FUNGSI DOWNLOAD DRIVER DARI GITHUB ======
 def download_driver_from_github():
@@ -50,7 +53,7 @@ def get_driver():
     # Cek fisik file
     if not EDGE_DRIVER_PATH.exists():
         if not download_driver_from_github():
-            pyautogui.alert("Driver hilang dan gagal download. Cek internet!", "Error")
+            alert_app("Driver hilang dan gagal download. Cek internet!", "Error")
             sys.exit()
 
     try:
@@ -65,7 +68,7 @@ def get_driver():
             msg = ("Driver di sistem sudah versi terbaru, tapi BROWSER EDGE PC ini masih versi lama.\n\n"
                    "TINDAKAN:\n1. Buka Edge\n2. Buka edge://settings/help\n3. Tunggu update & Restart PC.")
             print(msg)
-            pyautogui.alert(msg, "UPDATE EDGE DIPERLUKAN")
+            alert_app(msg, "UPDATE EDGE DIPERLUKAN")
             sys.exit()
         
         # SKENARIO B: DRIVER DI PC KETINGGALAN (BIASA TERJADI SETELAH EDGE UPDATE)
@@ -80,20 +83,20 @@ def get_driver():
                     msg_it = ("ERROR: Driver di cloud belum di update.\n\n"
                               "SEGERA HUBUNGI IT RSTN UNTUK UPDATE DI CLOUD!")
                     print(msg_it)
-                    pyautogui.alert(msg_it, "Warning")
+                    alert_app(msg_it, "Warning")
                     sys.exit()
             else:
-                pyautogui.alert("Gagal memperbarui driver dari Cloud.", "Error")
+                alert_app("Gagal memperbarui driver dari Cloud.", "Error")
                 sys.exit()
                 
     except Exception as e:
-        pyautogui.alert(f"Kesalahan Fatal: {e}", "Error")
+        alert_app(f"Kesalahan Fatal: {e}", "Error")
         sys.exit()
 
 # ====== 4. LOGIKA UTAMA ======
 def main():
     if not CONFIG_PATH.exists():
-        pyautogui.alert(f"File {CONFIG_PATH.name} tidak ditemukan!", "Error")
+        alert_app(f"File {CONFIG_PATH.name} tidak ditemukan!", "Error")
         sys.exit()
         
     config = configparser.ConfigParser()
@@ -105,7 +108,7 @@ def main():
         username = config.get('DEFAULT', 'username')
         password = config.get('DEFAULT', 'password')
     except Exception as e:
-        pyautogui.alert(f"Isi config.ini tidak lengkap!\n{e}", "Error")
+        alert_app(f"Isi config.ini tidak lengkap!\n{e}", "Error")
         sys.exit()
 
     driver = get_driver()
