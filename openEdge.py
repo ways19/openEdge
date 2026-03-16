@@ -104,8 +104,8 @@ def get_driver():
                         pass # Biarkan lanjut ke pesan Hubungi IT di bawah
 
                 msg_it = (f"GAGAL UPDATE OTOMATIS.\n\n"
-                          f"Edge PC sudah versi {browser_ver}, tapi di GitHub masih versi {driver_ver}.\n"
-                          "Mohon update file msedgedriver.exe di repositori GitHub Anda.")
+                          f"Edge PC sudah versi {browser_ver}, tapi di Cloud masih versi {driver_ver}.\n"
+                          "Mohon update file msedgedriver.exe di repositori Cloud Anda.")
                 ctypes.windll.user32.MessageBoxW(0, msg_it, "Peringatan IT RSTN", 0x10)
                 sys.exit()
 
