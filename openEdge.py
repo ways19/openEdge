@@ -51,8 +51,9 @@ def get_driver():
     options.add_argument("--disable-software-rasterizer")
     options.add_experimental_option("detach", True)
 
-    # Cek fisik file
+    # 1. Cek fisik file di awal
     if not EDGE_DRIVER_PATH.exists():
+        print("Driver tidak ditemukan. Mengunduh dari GitHub...")
         if not download_driver_from_github():
             alert_app("Driver hilang dan gagal download. Cek internet!", "Error")
             sys.exit()
@@ -63,39 +64,61 @@ def get_driver():
     
     except SessionNotCreatedException as e:
         error_msg = str(e)
-        error_msg = str(e)
-        print(f"Terdeteksi masalah versi: {error_msg}")
+        print(f"Pesan Error: {error_msg}")
         
-        # MENGGUNAKAN REGEX UNTUK AMBIL ANGKA VERSI
-        # Mencari pola angka seperti 144.xxx dan 146.xxx
+        # 1. Cari semua pola versi (Misal: 144.0.2535.0)
         versions = re.findall(r'\d+\.\d+\.\d+\.\d+', error_msg)
         
-        if len(versions) >= 2:
-            driver_ver = int(versions[0].split('.')[0])   # Hasilnya: 144
-            browser_ver = int(versions[1].split('.')[0])  # Hasilnya: 146
+        driver_ver = None
+        browser_ver = None
+
+        # 2. Logika Deteksi yang lebih kuat (Mencari berdasarkan konteks kalimat)
+        if "only supports Microsoft Edge version" in error_msg:
+            # Mencari angka versi yang mengikuti kata 'version' (ini biasanya Driver)
+            match_driver = re.search(r'supports Microsoft Edge version (\d+)', error_msg)
+            match_browser = re.search(r'browser version is (\d+)', error_msg)
             
+            if match_driver:
+                driver_ver = int(match_driver.group(1))
+            if match_browser:
+                browser_ver = int(match_browser.group(1))
+
+        # 3. Jika pencarian teks gagal, gunakan fallback ke indeks (dengan pengaman)
+        if (driver_ver is None or browser_ver is None) and len(versions) >= 2:
+            v1 = int(versions[0].split('.')[0])
+            v2 = int(versions[1].split('.')[0])
+            # Biasanya yang lebih kecil di awal pesan error adalah driver yang lama
+            driver_ver = min(v1, v2)
+            browser_ver = max(v1, v2)
+
+        # 4. Eksekusi Keputusan
+        if driver_ver and browser_ver:
             if driver_ver < browser_ver:
-                # Driver lama, Browser baru
-                print("Driver ketinggalan. Mendownload driver baru dari GitHub...")
+                print(f"Update Terdeteksi: Driver {driver_ver} < Browser {browser_ver}")
                 if download_driver_from_github():
-                    # Coba jalankan lagi setelah download
+                    # Coba inisialisasi ulang
                     try:
                         service = Service(executable_path=str(EDGE_DRIVER_PATH))
                         return webdriver.Edge(service=service, options=options)
                     except:
-                        alert_app("Gagal sinkronisasi. Hubungi IT RSTN!", "Error")
-                        sys.exit()
-            
-            elif driver_ver > browser_ver:
-                # Driver baru, Browser minta diupdate
-                msg = f"Driver sudah versi {driver_ver}, tapi Microsoft Edge Anda masih Versi {browser_ver}.\n\nSilakan Update Edge di menu Settings -> About."
-                alert_app(msg, "Update Edge Diperlukan")
+                        pass # Biarkan lanjut ke pesan Hubungi IT di bawah
+
+                msg_it = (f"GAGAL UPDATE OTOMATIS.\n\n"
+                          f"Edge PC sudah versi {browser_ver}, tapi di GitHub masih versi {driver_ver}.\n"
+                          "Mohon update file msedgedriver.exe di repositori GitHub Anda.")
+                ctypes.windll.user32.MessageBoxW(0, msg_it, "Peringatan IT RSTN", 0x10)
                 sys.exit()
-        # Jika tidak ketemu angka versinya, coba download saja sebagai langkah terakhir
+
+            elif driver_ver > browser_ver:
+                msg_edge = (f"Browser Edge Anda ({browser_ver}) perlu di-update.\n"
+                            f"Driver sudah siap untuk versi {driver_ver}.\n\n"
+                            "Buka Edge -> Settings -> About untuk update.")
+                ctypes.windll.user32.MessageBoxW(0, msg_edge, "Update Edge", 0x30)
+                sys.exit()
+
+        # Fallback jika semua deteksi gagal
+        print("Gagal mendeteksi versi secara spesifik. Mencoba download ulang...")
         download_driver_from_github()
-        sys.exit()         
-    except Exception as e:
-        alert_app(f"Kesalahan Fatal: {e}", "Error")
         sys.exit()
 
 # ====== 4. LOGIKA UTAMA ======
